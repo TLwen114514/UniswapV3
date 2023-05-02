@@ -4,6 +4,7 @@ pragma solidity ^0.8.14;
 import "./library/Tick.sol";
 import "./library/Position.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
+import "./interfaces/IUniswapV3SwapCallback.sol";
 import "./interfaces/IERC20.sol";
 
 // src/UniswapV3Pool.sol
@@ -26,6 +27,16 @@ contract UniswapV3Pool {
         uint256 amount1
     );
 
+    event Swap(
+        address indexed sender,
+        address indexed recipient,
+        int256 amount0,
+        int256 amount1,
+        uint160 sqrtPriceX96,
+        uint128 liquidity,
+        int24 tick
+    );
+
     int24 internal constant MIN_TICK = -887272;
     int24 internal constant MAX_TICK = -MIN_TICK;
 
@@ -33,14 +44,12 @@ contract UniswapV3Pool {
     address public immutable token0;
     address public immutable token1;
 
-
     struct CallbackData {
         address token0;
         address token1;
         address payer;
     }
 
-    
     constructor(
         address token0_,
         address token1_,
@@ -130,6 +139,41 @@ token 所有者的地址，来识别是谁提供的流动性；
         );
     }
 
+ 
+    function swap(address recipient, bytes calldata data)
+        public
+        returns (int256 amount0, int256 amount1)
+    {
+        int24 nextTick = 85184;
+        uint160 nextPrice = 5604469350942327889444743441197;
+
+        amount0 = -0.008396714242162444 ether;
+        amount1 = 42 ether;
+
+        (slot0.tick, slot0.sqrtPriceX96) = (nextTick, nextPrice);
+
+        IERC20(token0).transfer(recipient, uint256(-amount0));
+
+        uint256 balance1Before = balance1();
+        IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(
+            amount0,
+            amount1,
+            data
+        );
+        if (balance1Before + uint256(amount1) > balance1())
+            revert InsufficientInputAmount();
+
+        emit Swap(
+            msg.sender,
+            recipient,
+            amount0,
+            amount1,
+            slot0.sqrtPriceX96,
+            liquidity,
+            slot0.tick
+        );
+    }
+
     function balance0() internal returns (uint256 balance) {
         balance = IERC20(token0).balanceOf(address(this));
     }
@@ -138,4 +182,3 @@ token 所有者的地址，来识别是谁提供的流动性；
         balance = IERC20(token1).balanceOf(address(this));
     }
 }
-
