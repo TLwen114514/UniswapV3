@@ -33,6 +33,14 @@ contract UniswapV3Pool {
     address public immutable token0;
     address public immutable token1;
 
+
+    struct CallbackData {
+        address token0;
+        address token1;
+        address payer;
+    }
+
+    
     constructor(
         address token0_,
         address token1_,
@@ -71,14 +79,17 @@ token 所有者的地址，来识别是谁提供的流动性；
         address owner,
         int24 lowerTick,
         int24 upperTick,
-        uint128 amount
+        uint128 amount,
+        bytes calldata data
     ) external returns (uint256 amount0, uint256 amount1) {
         if (
             lowerTick >= upperTick ||
             lowerTick < MIN_TICK ||
             upperTick > MAX_TICK
         ) revert InvalidTickRange();
+
         if (amount == 0) revert ZeroLiquidity();
+
         ticks.update(lowerTick, amount);
         ticks.update(upperTick, amount);
 
@@ -88,21 +99,35 @@ token 所有者的地址，来识别是谁提供的流动性；
             upperTick
         );
         position.update(amount);
-        amount0 = 0.998976618347425280 ether;
-        amount1 = 5000 ether;
+
+        amount0 = 0.998976618347425280 ether; // TODO: replace with calculation
+        amount1 = 5000 ether; // TODO: replace with calculation
+
+        liquidity += uint128(amount);
+
         uint256 balance0Before;
         uint256 balance1Before;
         if (amount0 > 0) balance0Before = balance0();
         if (amount1 > 0) balance1Before = balance1();
         IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(
             amount0,
-            amount1
+            amount1,
+            data
         );
         if (amount0 > 0 && balance0Before + amount0 > balance0())
             revert InsufficientInputAmount();
         if (amount1 > 0 && balance1Before + amount1 > balance1())
             revert InsufficientInputAmount();
-        emit Mint(msg.sender, owner, lowerTick, upperTick, amount, amount0, amount1);
+
+        emit Mint(
+            msg.sender,
+            owner,
+            lowerTick,
+            upperTick,
+            amount,
+            amount0,
+            amount1
+        );
     }
 
     function balance0() internal returns (uint256 balance) {
