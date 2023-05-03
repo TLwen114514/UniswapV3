@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.14;
 
+// 持仓信息
+// 价格区间 
 library Position {
     struct Info {
         uint128 liquidity;
@@ -11,7 +13,7 @@ library Position {
         address owner,
         int24 lowerTick,
         int24 upperTick
-    ) internal view returns (Position.Info storage position) {
+    ) internal view returns (Info storage position) {
         position = self[
             keccak256(abi.encodePacked(owner, lowerTick, upperTick))
         ];
