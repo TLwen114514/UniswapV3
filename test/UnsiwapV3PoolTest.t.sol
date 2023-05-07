@@ -5,11 +5,13 @@ import {Test, stdError} from "forge-std/Test.sol";
 import "./mocks/ERC20Mintable.sol";
 import "../src/UniswapV3Pool.sol";
 import "./TestUtils.sol";
+import "../src/UniswapV3Quoter.sol";
 
 contract UniswapV3PoolTest is Test, TestUtils {
     ERC20Mintable token0;
     ERC20Mintable token1;
     UniswapV3Pool pool;
+    UniswapV3Quoter quoter;
 
     bool transferInMintCallback = true;
     bool transferInSwapCallback = true;
@@ -30,6 +32,7 @@ contract UniswapV3PoolTest is Test, TestUtils {
     function setUp() public {
         token0 = new ERC20Mintable("Ether", "ETH", 18);
         token1 = new ERC20Mintable("USDC", "USDC", 18);
+        quoter = new UniswapV3Quoter();
     }
 
     function testMintSuccess() public {
