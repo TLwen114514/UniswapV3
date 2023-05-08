@@ -70,17 +70,22 @@ contract UniswapV3Pool is IUniswapV3Pool {
     }
 
     struct StepState {
+        // 当前起始价格
         uint160 sqrtPriceStartX96;
+        // 目标价格的tickindex
         int24 nextTick;
+        // nextTick是否初始化
         bool initialized;
+        // 目标tick的价格
         uint160 sqrtPriceNextX96;
+        // Step中交易了多少InToken
         uint256 amountIn;
+        // Step中交易了多少OutToken
         uint256 amountOut;
     }
 
     Slot0 public slot0;
 
-    // Amount of liquidity, L.
     uint128 public liquidity;
 
     mapping(int24 => Tick.Info) public ticks;
@@ -158,7 +163,6 @@ contract UniswapV3Pool is IUniswapV3Pool {
         uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) public returns (int256 amount0, int256 amount1) {
-        // Caching for gas saving
         Slot0 memory slot0_ = slot0;
         uint128 liquidity_ = liquidity;
 
