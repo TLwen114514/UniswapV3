@@ -3,42 +3,93 @@ pragma solidity ^0.8.14;
 
 import "forge-std/console.sol";
 import "forge-std/Script.sol";
-import "../src/UniswapV3Pool.sol";
+
+import "../src/interfaces/IUniswapV3Manager.sol";
+import "../src/lib/FixedPoint96.sol";
+import "../src/lib/Math.sol";
+import "../src/UniswapV3Factory.sol";
 import "../src/UniswapV3Manager.sol";
+import "../src/UniswapV3Pool.sol";
+import "../src/UniswapV3Quoter.sol";
 import "../test/mocks/ERC20Mintable.sol";
+import "../test/TestUtils.sol";
 
-contract DeployDevelopment is Script {
+contract DeployDevelopment is Script, TestUtils {
+    struct TokenBalances {
+        uint256 uni;
+        uint256 usdc;
+        uint256 usdt;
+        uint256 wbtc;
+        uint256 weth;
+    }
+
+    TokenBalances balances =
+        TokenBalances({uni: 200 ether, usdc: 2_000_000 ether, usdt: 2_000_000 ether, wbtc: 20 ether, weth: 100 ether});
+
     function run() public {
-        uint256 wethBalance = 1 ether;
-        uint256 usdcBalance = 5042 ether;
-        int24 currentTick = 85176;
-        uint160 currentSqrtP = 5602277097478614198912276234240;
-
         vm.startBroadcast();
-        ERC20Mintable token0 = new ERC20Mintable("Wrapped Ether", "WETH", 18);
-        ERC20Mintable token1 = new ERC20Mintable("USD Coin", "USDC", 18);
 
-        UniswapV3Pool pool = new UniswapV3Pool(
-            address(token0),
-            address(token1),
-            currentSqrtP,
-            currentTick
+        ERC20Mintable weth = new ERC20Mintable("Wrapped Ether", "WETH", 18);
+        ERC20Mintable usdc = new ERC20Mintable("USD Coin", "USDC", 18);
+        ERC20Mintable uni = new ERC20Mintable("Uniswap Coin", "UNI", 18);
+        ERC20Mintable wbtc = new ERC20Mintable("Wrapped Bitcoin", "WBTC", 18);
+        ERC20Mintable usdt = new ERC20Mintable("USD Token", "USDT", 18);
+
+        UniswapV3Factory factory = new UniswapV3Factory();
+        UniswapV3Manager manager = new UniswapV3Manager(address(factory));
+        UniswapV3Quoter quoter = new UniswapV3Quoter(address(factory));
+
+        UniswapV3Pool wethUsdc = deployPool(factory, address(weth), address(usdc), 3000, 5000);
+
+        UniswapV3Pool wethUni = deployPool(factory, address(weth), address(uni), 3000, 10);
+
+        UniswapV3Pool wbtcUSDT = deployPool(factory, address(wbtc), address(usdt), 3000, 20_000);
+
+        UniswapV3Pool usdtUSDC = deployPool(factory, address(usdt), address(usdc), 500, 1);
+
+        uni.mint(msg.sender, balances.uni);
+        usdc.mint(msg.sender, balances.usdc);
+        usdt.mint(msg.sender, balances.usdt);
+        wbtc.mint(msg.sender, balances.wbtc);
+        weth.mint(msg.sender, balances.weth);
+
+        uni.approve(address(manager), 100 ether);
+        usdc.approve(address(manager), 1_005_000 ether);
+        usdt.approve(address(manager), 1_200_000 ether);
+        wbtc.approve(address(manager), 10 ether);
+        weth.approve(address(manager), 11 ether);
+
+        manager.mint(mintParams(address(weth), address(usdc), 4545, 5500, 1 ether, 5000 ether));
+        manager.mint(mintParams(address(weth), address(uni), 7, 13, 10 ether, 100 ether));
+
+        manager.mint(mintParams(address(wbtc), address(usdt), 19400, 20500, 10 ether, 200_000 ether));
+        manager.mint(
+            mintParams(
+                address(usdt),
+                address(usdc),
+                uint160(77222060634363714391462903808),
+                uint160(81286379615119694729911992320),
+                1_000_000 ether,
+                1_000_000 ether,
+                500
+            )
         );
-
-        UniswapV3Manager manager = new UniswapV3Manager();
-
-        token0.mint(msg.sender, wethBalance);
-        token1.mint(msg.sender, usdcBalance);
 
         vm.stopBroadcast();
 
-        console.log("WETH address", address(token0));
-        console.log("USDC address", address(token1));
-        console.log("Pool address", address(pool));
+        console.log("WETH address", address(weth));
+        console.log("UNI address", address(uni));
+        console.log("USDC address", address(usdc));
+        console.log("USDT address", address(usdt));
+        console.log("WBTC address", address(wbtc));
+
+        console.log("Factory address", address(factory));
         console.log("Manager address", address(manager));
-        //   WETH address 0x5FbDB2315678afecb367f032d93F642f64180aa3
-        // USDC address 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
-//   Pool address 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
-//   Manager address 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+        console.log("Quoter address", address(quoter));
+
+        console.log("USDT/USDC address", address(usdtUSDC));
+        console.log("WBTC/USDT address", address(wbtcUSDT));
+        console.log("WETH/UNI address", address(wethUni));
+        console.log("WETH/USDC address", address(wethUsdc));
     }
 }
