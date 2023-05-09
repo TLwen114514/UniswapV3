@@ -77,6 +77,9 @@ library Math {
     {
         return sqrtPriceX96 + uint160((amountIn << FixedPoint96.RESOLUTION) / liquidity);
     }
+    /**
+     * 计算a*b/c并向上取整
+     */
 
     function mulDivRoundingUp(uint256 a, uint256 b, uint256 denominator) internal pure returns (uint256 result) {
         result = PRBMath.mulDiv(a, b, denominator);
@@ -85,6 +88,9 @@ library Math {
             result++;
         }
     }
+    /**
+     * 除法向上取整
+     */
 
     function divRoundingUp(uint256 numerator, uint256 denominator) internal pure returns (uint256 result) {
         assembly {

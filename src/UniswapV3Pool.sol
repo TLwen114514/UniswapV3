@@ -5,6 +5,7 @@ import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3FlashCallback.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3Pool.sol";
+import "./interfaces/IUniswapV3PoolDeployer.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
 
 import "./lib/LiquidityMath.sol";
@@ -21,6 +22,7 @@ contract UniswapV3Pool is IUniswapV3Pool {
     using Position for mapping(bytes32 => Position.Info);
     using Position for Position.Info;
 
+    error AlreadyInitialized();
     error InsufficientInputAmount();
     error InvalidPriceLimit();
     error InvalidTickRange();
@@ -49,9 +51,11 @@ contract UniswapV3Pool is IUniswapV3Pool {
         int24 tick
     );
 
-    // Pool tokens, immutable
+    // Pool parameters
+    address public immutable factory;
     address public immutable token0;
     address public immutable token1;
+    uint24 public immutable tickSpacing;
 
     // First slot will contain essential data
     struct Slot0 {
@@ -70,31 +74,31 @@ contract UniswapV3Pool is IUniswapV3Pool {
     }
 
     struct StepState {
-        // 当前起始价格
         uint160 sqrtPriceStartX96;
-        // 目标价格的tickindex
         int24 nextTick;
-        // nextTick是否初始化
         bool initialized;
-        // 目标tick的价格
         uint160 sqrtPriceNextX96;
-        // Step中交易了多少InToken
         uint256 amountIn;
-        // Step中交易了多少OutToken
         uint256 amountOut;
     }
 
     Slot0 public slot0;
 
+    // Amount of liquidity, L.
     uint128 public liquidity;
 
     mapping(int24 => Tick.Info) public ticks;
     mapping(int16 => uint256) public tickBitmap;
     mapping(bytes32 => Position.Info) public positions;
 
-    constructor(address token0_, address token1_, uint160 sqrtPriceX96, int24 tick) {
-        token0 = token0_;
-        token1 = token1_;
+    constructor() {
+        (factory, token0, token1, tickSpacing) = IUniswapV3PoolDeployer(msg.sender).parameters();
+    }
+
+    function initialize(uint160 sqrtPriceX96) public {
+        if (slot0.sqrtPriceX96 != 0) revert AlreadyInitialized();
+
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
         slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick});
     }
@@ -113,11 +117,11 @@ contract UniswapV3Pool is IUniswapV3Pool {
         bool flippedUpper = ticks.update(upperTick, int128(amount), true);
 
         if (flippedLower) {
-            tickBitmap.flipTick(lowerTick, 1);
+            tickBitmap.flipTick(lowerTick, int24(tickSpacing));
         }
 
         if (flippedUpper) {
-            tickBitmap.flipTick(upperTick, 1);
+            tickBitmap.flipTick(upperTick, int24(tickSpacing));
         }
 
         Position.Info storage position = positions.get(owner, lowerTick, upperTick);
@@ -163,6 +167,7 @@ contract UniswapV3Pool is IUniswapV3Pool {
         uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) public returns (int256 amount0, int256 amount1) {
+        // Caching for gas saving
         Slot0 memory slot0_ = slot0;
         uint128 liquidity_ = liquidity;
 
@@ -185,7 +190,7 @@ contract UniswapV3Pool is IUniswapV3Pool {
 
             step.sqrtPriceStartX96 = state.sqrtPriceX96;
 
-            (step.nextTick,) = tickBitmap.nextInitializedTickWithinOneWord(state.tick, 1, zeroForOne);
+            (step.nextTick,) = tickBitmap.nextInitializedTickWithinOneWord(state.tick, int24(tickSpacing), zeroForOne);
 
             step.sqrtPriceNextX96 = TickMath.getSqrtRatioAtTick(step.nextTick);
 
