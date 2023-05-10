@@ -11,7 +11,7 @@ import "../src/UniswapV3Factory.sol";
 import "../src/UniswapV3Manager.sol";
 import "../src/UniswapV3Pool.sol";
 import "../src/UniswapV3Quoter.sol";
-import "../test/mocks/ERC20Mintable.sol";
+import "../test/ERC20Mintable.sol";
 import "../test/TestUtils.sol";
 
 contract DeployDevelopment is Script, TestUtils {

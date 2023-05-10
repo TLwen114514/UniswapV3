@@ -3,7 +3,6 @@ pragma solidity ^0.8.14;
 
 import "solmate/tokens/ERC20.sol";
 
-
 contract ERC20Mintable is ERC20 {
     constructor(
         string memory _name,
