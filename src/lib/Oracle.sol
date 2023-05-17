@@ -3,7 +3,9 @@ pragma solidity ^0.8.14;
 
 library Oracle {
     struct Observation {
+        // 记录区块的时间戳
         uint32 timestamp;
+        // tick index 的时间加权累积值
         int56 tickCumulative;
         bool initialized;
     }
@@ -138,20 +140,27 @@ library Oracle {
         uint16 index,
         uint16 cardinality
     ) internal view returns (int56 tickCumulative) {
+        // 当secondsAgo传0 返回最新的一个Oracle数据
         if (secondsAgo == 0) {
             Observation memory last = self[index];
+            // 区块时间戳 不等于 Oracle最新的时间戳，更新last
             if (last.timestamp != time) last = transform(last, time, tick);
             return last.tickCumulative;
         }
 
+        // 当secondsAgo不为0
+        // 计算时间区间的另一个点
         uint32 target = time - secondsAgo;
 
+        // 计算出请求时间戳最近的两个 Oracle 数据
         (Observation memory beforeOrAt, Observation memory atOrAfter) =
             getSurroundingObservations(self, time, target, tick, index, cardinality);
 
         if (target == beforeOrAt.timestamp) {
+            // 如果请求时间和返回的左侧时间戳吻合，那么可以直接使用
             return beforeOrAt.tickCumulative;
         } else if (target == atOrAfter.timestamp) {
+            // 如果请求时间和返回的右侧时间戳吻合，那么可以直接使用
             return atOrAfter.tickCumulative;
         } else {
             uint56 observationTimeDelta = atOrAfter.timestamp - beforeOrAt.timestamp;

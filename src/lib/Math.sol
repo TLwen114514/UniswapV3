@@ -5,7 +5,7 @@ import "./FixedPoint96.sol";
 import "prb-math/PRBMath.sol";
 
 library Math {
-    /// @notice Calculates amount0 delta between two prices
+    // 通过价格差Δ√P和流动性L计算 ΔX (token0)
     function calcAmount0Delta(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint128 liquidity, bool roundUp)
         internal
         pure
@@ -16,10 +16,11 @@ library Math {
         }
 
         require(sqrtPriceAX96 > 0);
-
+        // 因为价格是 96位定点数，所以liquidity需要左移96位
         uint256 numerator1 = uint256(liquidity) << FixedPoint96.RESOLUTION;
         uint256 numerator2 = sqrtPriceBX96 - sqrtPriceAX96;
-
+        // 价格向上入：若不能整除则结果+1
+        // 价格向下舍：若不能整除则结果取整数
         if (roundUp) {
             amount0 = divRoundingUp(mulDivRoundingUp(numerator1, numerator2, sqrtPriceBX96), sqrtPriceAX96);
         } else {
@@ -27,7 +28,6 @@ library Math {
         }
     }
 
-    /// @notice Calculates amount1 delta between two prices
     function calcAmount1Delta(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, uint128 liquidity, bool roundUp)
         internal
         pure
@@ -44,7 +44,6 @@ library Math {
         }
     }
 
-    /// @notice Calculates amount0 delta between two prices
     function calcAmount0Delta(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, int128 liquidity)
         internal
         pure
@@ -55,7 +54,6 @@ library Math {
             : int256(calcAmount0Delta(sqrtPriceAX96, sqrtPriceBX96, uint128(liquidity), true));
     }
 
-    /// @notice Calculates amount1 delta between two prices
     function calcAmount1Delta(uint160 sqrtPriceAX96, uint160 sqrtPriceBX96, int128 liquidity)
         internal
         pure

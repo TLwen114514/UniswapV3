@@ -95,11 +95,11 @@ contract UniswapV3Pool is IUniswapV3Pool {
         uint160 sqrtPriceX96;
         // Current tick
         int24 tick;
-        // Most recent observation index
+        // 最近更新的预言机数据的索引值
         uint16 observationIndex;
-        // Maximum number of observations
+        // 当前能存储的最大数量（数据的个数）
         uint16 observationCardinality;
-        // Next maximum number of observations
+        // Oracle 下次将要写入数据位置的索引值
         uint16 observationCardinalityNext;
     }
 
@@ -114,8 +114,11 @@ contract UniswapV3Pool is IUniswapV3Pool {
 
     struct StepState {
         uint160 sqrtPriceStartX96;
+        // 目标价格的Tick
         int24 nextTick;
+        // 目标tick是否已经初始化
         bool initialized;
+        // 目标价格
         uint160 sqrtPriceNextX96;
         uint256 amountIn;
         uint256 amountOut;
@@ -124,7 +127,6 @@ contract UniswapV3Pool is IUniswapV3Pool {
 
     Slot0 public slot0;
 
-    // Amount of liquidity, L.
     uint128 public liquidity;
 
     mapping(int24 => Tick.Info) public ticks;
@@ -163,7 +165,6 @@ contract UniswapV3Pool is IUniswapV3Pool {
         internal
         returns (Position.Info storage position, int256 amount0, int256 amount1)
     {
-        // gas optimizations
         Slot0 memory slot0_ = slot0;
         uint256 feeGrowthGlobal0X128_ = feeGrowthGlobal0X128;
         uint256 feeGrowthGlobal1X128_ = feeGrowthGlobal1X128;
@@ -268,6 +269,7 @@ contract UniswapV3Pool is IUniswapV3Pool {
     }
 
     function burn(int24 lowerTick, int24 upperTick, uint128 amount) public returns (uint256 amount0, uint256 amount1) {
+        // 函数入参amount >= 0 传入 _modifyPosition 需要加负号
         (Position.Info storage position, int256 amount0Int, int256 amount1Int) = _modifyPosition(
             ModifyPositionParams({
                 owner: msg.sender,
@@ -277,9 +279,12 @@ contract UniswapV3Pool is IUniswapV3Pool {
             })
         );
 
+        // amount0Int < 0 此处需要反号
         amount0 = uint256(-amount0Int);
         amount1 = uint256(-amount1Int);
 
+        // 在用户position上记录增加token数量
+        // 注意burn只是移除流动性，转为token，并未将token发送回给用户
         if (amount0 > 0 || amount1 > 0) {
             (position.tokensOwed0, position.tokensOwed1) =
                 (position.tokensOwed0 + uint128(amount0), position.tokensOwed1 + uint128(amount1));
@@ -292,11 +297,13 @@ contract UniswapV3Pool is IUniswapV3Pool {
         address recipient,
         int24 lowerTick,
         int24 upperTick,
+        // 期望回收的手续费数量
         uint128 amount0Requested,
         uint128 amount1Requested
     ) public returns (uint128 amount0, uint128 amount1) {
         Position.Info storage position = positions.get(msg.sender, lowerTick, upperTick);
 
+        // 当position tokensOwed余额 < 期望数值取出余额
         amount0 = amount0Requested > position.tokensOwed0 ? position.tokensOwed0 : amount0Requested;
         amount1 = amount1Requested > position.tokensOwed1 ? position.tokensOwed1 : amount1Requested;
 
@@ -331,11 +338,17 @@ contract UniswapV3Pool is IUniswapV3Pool {
         ) revert InvalidPriceLimit();
 
         SwapState memory state = SwapState({
+            // 输入的token数量
             amountSpecifiedRemaining: amountSpecified,
+            //  已计算交易的输入数量
             amountCalculated: 0,
+            // 当前交易价格
             sqrtPriceX96: slot0_.sqrtPriceX96,
+            // 当前tickindex
             tick: slot0_.tick,
+            // 全局费feeGrowth 手续费从输入的token中扣除
             feeGrowthGlobalX128: zeroForOne ? feeGrowthGlobal0X128 : feeGrowthGlobal1X128,
+            // 当前可用的流动性（当前处于激活状态的position总和）
             liquidity: liquidity_
         });
 
@@ -360,30 +373,34 @@ contract UniswapV3Pool is IUniswapV3Pool {
 
             state.amountSpecifiedRemaining -= step.amountIn + step.feeAmount;
             state.amountCalculated += step.amountOut;
-
+            // 更新全局手续费的计算值 即每单流动性手续费的总和 (feeGrowth * 整体流动性 = 所有的手续费)
             if (state.liquidity > 0) {
                 state.feeGrowthGlobalX128 += PRBMath.mulDiv(step.feeAmount, FixedPoint128.Q128, state.liquidity);
             }
-
+            // 当交易价格触及下一个tick 需要将目标价格移动
             if (state.sqrtPriceX96 == step.sqrtPriceNextX96) {
+                // 价格穿过tick，更新tick数据，得到tick上的流动性净值
+                // (用于价格变化时，计算当前已激活的总流动性)
                 int128 liquidityDelta = ticks.cross(
                     step.nextTick,
                     (zeroForOne ? state.feeGrowthGlobalX128 : feeGrowthGlobal0X128),
                     (zeroForOne ? feeGrowthGlobal1X128 : state.feeGrowthGlobalX128)
                 );
-
+                // 如果价格向左移动（变小），需要反号
                 if (zeroForOne) liquidityDelta = -liquidityDelta;
-
+                // 当前激活的总流动性 + 流动性净值 (即为更新后的总流动性)
                 state.liquidity = LiquidityMath.addLiquidity(state.liquidity, liquidityDelta);
 
                 if (state.liquidity == 0) revert NotEnoughLiquidity();
-
+                // 更新 tick 的值，使得下一次循环时让 tickBitmap 进入下一个 word 中查询
+                // 这里zeroForOne为false时没有+1是因为向右寻找时会+1
                 state.tick = zeroForOne ? step.nextTick - 1 : step.nextTick;
             } else if (state.sqrtPriceX96 != step.sqrtPriceStartX96) {
+                // 价格没有越过目标tick 需要重新通过价格计算tick的索引值
                 state.tick = TickMath.getTickAtSqrtRatio(state.sqrtPriceX96);
             }
         }
-
+        // 如果分步交易循环完成之后 tick index发生变化，需要向Oracle写入新数据
         if (state.tick != slot0_.tick) {
             (uint16 observationIndex, uint16 observationCardinality) = observations.write(
                 slot0_.observationIndex,
@@ -396,26 +413,29 @@ contract UniswapV3Pool is IUniswapV3Pool {
             (slot0.sqrtPriceX96, slot0.tick, slot0.observationIndex, slot0.observationCardinality) =
                 (state.sqrtPriceX96, state.tick, observationIndex, observationCardinality);
         } else {
+            // 否则只更新slot0的价格(此时交易在bitmap的同一个word内完成)
             slot0.sqrtPriceX96 = state.sqrtPriceX96;
         }
-
+        // 更新当前激活状态的所有流动性
         if (liquidity_ != state.liquidity) liquidity = state.liquidity;
-
+        // 更新全局的交易手续费 若有必要 更新协议手续费
+        // 溢出是可以接受的，协议手续费必须在达到 type(uint128).max 之前取出
         if (zeroForOne) {
             feeGrowthGlobal0X128 = state.feeGrowthGlobalX128;
         } else {
             feeGrowthGlobal1X128 = state.feeGrowthGlobalX128;
         }
-
+        // 返回交易实际的输入和输出数量
         (amount0, amount1) = zeroForOne
             ? (int256(amountSpecified - state.amountSpecifiedRemaining), -int256(state.amountCalculated))
             : (-int256(state.amountCalculated), int256(amountSpecified - state.amountSpecifiedRemaining));
-
+        // 将交易输出转给接收者
         if (zeroForOne) {
             IERC20(token1).transfer(recipient, uint256(-amount1));
 
             uint256 balance0Before = balance0();
             IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
+            // 检查输入token转入数量
             if (balance0Before + uint256(amount0) > balance0()) {
                 revert InsufficientInputAmount();
             }
@@ -433,15 +453,17 @@ contract UniswapV3Pool is IUniswapV3Pool {
     }
 
     function flash(uint256 amount0, uint256 amount1, bytes calldata data) public {
+        // 计算手续费
         uint256 fee0 = Math.mulDivRoundingUp(amount0, fee, 1e6);
         uint256 fee1 = Math.mulDivRoundingUp(amount1, fee, 1e6);
 
         uint256 balance0Before = IERC20(token0).balanceOf(address(this));
         uint256 balance1Before = IERC20(token1).balanceOf(address(this));
 
+        // 将贷款打给借贷者
         if (amount0 > 0) IERC20(token0).transfer(msg.sender, amount0);
         if (amount1 > 0) IERC20(token1).transfer(msg.sender, amount1);
-
+        // 还款,回调
         IUniswapV3FlashCallback(msg.sender).uniswapV3FlashCallback(fee0, fee1, data);
 
         if (IERC20(token0).balanceOf(address(this)) < balance0Before + fee0) {
