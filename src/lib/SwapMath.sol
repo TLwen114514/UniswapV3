@@ -12,6 +12,8 @@ library SwapMath {
         uint24 fee
     ) internal pure returns (uint160 sqrtPriceNextX96, uint256 amountIn, uint256 amountOut, uint256 feeAmount) {
         bool zeroForOne = sqrtPriceCurrentX96 >= sqrtPriceTargetX96;
+        // 在交易之前，先计算当价格移动到交易区间边界时，所需要的手续费
+        // 即此步骤最多需要的手续费数额
         uint256 amountRemainingLessFee = PRBMath.mulDiv(amountRemaining, 1e6 - fee, 1e6);
         // 通过deltaPrice（当前价格到目标价格的差）和流动性L计算deltaX
         amountIn = zeroForOne
@@ -47,6 +49,8 @@ library SwapMath {
             // 当该步交易越过下一个tick时，使用费率计算手续费
             // 注意这里分母是 1e6 - feePips 不是 1e6
             // 因为此时amountIn是由amountRemainingLessFee计算而来，而amountRemainingLessFee已经在最开始刨除了手续费
+            // 比如fee为300
+            // 此时为amountIn*300/1000000
             feeAmount = Math.mulDivRoundingUp(amountIn, fee, 1e6 - fee);
         }
     }

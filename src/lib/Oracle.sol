@@ -29,16 +29,18 @@ library Oracle {
         uint16 cardinalityNext
     ) internal returns (uint16 indexUpdated, uint16 cardinalityUpdated) {
         Observation memory last = self[index];
-
+        // 同一个区块内，只会在第一笔交易中写入 Oracle 数据
         if (last.timestamp == timestamp) return (index, cardinality);
-
+        // 检查是否需要使用新的数组空间
         if (cardinalityNext > cardinality && index == (cardinality - 1)) {
             cardinalityUpdated = cardinalityNext;
         } else {
             cardinalityUpdated = cardinality;
         }
 
+        // 本次写入的索引，使用余数实现
         indexUpdated = (index + 1) % cardinalityUpdated;
+        // 写入 Oracle 数据
         self[indexUpdated] = transform(last, timestamp, tick);
     }
 
@@ -57,10 +59,12 @@ library Oracle {
         pure
         returns (Observation memory)
     {
+        // 上次 Oracle 数据和本次的时间差
         uint56 delta = timestamp - last.timestamp;
 
         return Observation({
             timestamp: timestamp,
+            // 计算 tick index 的时间加权累积值
             tickCumulative: last.tickCumulative + int56(tick) * int56(delta),
             initialized: true
         });
@@ -106,6 +110,7 @@ library Oracle {
         }
     }
 
+    ///@notice 在已记录的 Oracle 数组中，找到时间戳离其最近的两个 Oracle 数据
     function getSurroundingObservations(
         Observation[65535] storage self,
         uint32 time,
@@ -114,21 +119,28 @@ library Oracle {
         uint16 index,
         uint16 cardinality
     ) private view returns (Observation memory beforeOrAt, Observation memory atOrAfter) {
+        // 先把 beforeOrAt 设置为当前最新数据
         beforeOrAt = self[index];
 
         if (lte(time, beforeOrAt.timestamp, target)) {
             if (beforeOrAt.timestamp == target) {
+                // 如果时间戳相等，那么可以忽略 atOrAfter 直接返回
                 return (beforeOrAt, atOrAfter);
             } else {
+                // 当前区块中发生代币对的交易之前请求此函数时可能会发生这种情况
+                // 需要将当前还未持久化的数据，封装成一个 Oracle 数据返回
                 return (beforeOrAt, transform(beforeOrAt, target, tick));
             }
         }
 
+        // 将 beforeOrAt 调整至 Oracle 数组中最老的数据
+        // 即为当前 index 的下一个数据，或者 index 为 0 的数据
         beforeOrAt = self[(index + 1) % cardinality];
         if (!beforeOrAt.initialized) beforeOrAt = self[0];
 
         require(lte(time, beforeOrAt.timestamp, target), "OLD");
 
+        // 然后通过二分查找的方式找到离目标时间点最近的前后两个 Oracle 数据
         return binarySearch(self, time, target, index, cardinality);
     }
 

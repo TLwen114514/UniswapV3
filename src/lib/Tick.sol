@@ -46,7 +46,6 @@ library Tick {
                 tickInfo.feeGrowthOutside0X128 = feeGrowthGlobal0X128;
                 tickInfo.feeGrowthOutside1X128 = feeGrowthGlobal1X128;
             }
-
             tickInfo.initialized = true;
         }
         // 更新tick的总流动性
@@ -67,6 +66,7 @@ library Tick {
         uint256 feeGrowthGlobal1X128
     ) internal returns (int128 liquidityDelta) {
         Tick.Info storage info = self[tick];
+        //新的fo = fg-fo
         info.feeGrowthOutside0X128 = feeGrowthGlobal0X128 - info.feeGrowthOutside0X128;
         info.feeGrowthOutside1X128 = feeGrowthGlobal1X128 - info.feeGrowthOutside1X128;
         liquidityDelta = info.liquidityNet;

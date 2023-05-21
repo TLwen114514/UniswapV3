@@ -196,6 +196,7 @@ contract UniswapV3Pool is IUniswapV3Pool {
             tickBitmap.flipTick(params.upperTick, int24(tickSpacing));
         }
 
+        // 计算出此position中手续费的总额
         (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) = ticks.getFeeGrowthInside(
             params.lowerTick, params.upperTick, slot0_.tick, feeGrowthGlobal0X128_, feeGrowthGlobal1X128_
         );
@@ -340,7 +341,7 @@ contract UniswapV3Pool is IUniswapV3Pool {
         SwapState memory state = SwapState({
             // 输入的token数量
             amountSpecifiedRemaining: amountSpecified,
-            //  已计算交易的输入数量
+            // 已计算交易的输入数量
             amountCalculated: 0,
             // 当前交易价格
             sqrtPriceX96: slot0_.sqrtPriceX96,
@@ -405,8 +406,11 @@ contract UniswapV3Pool is IUniswapV3Pool {
             (uint16 observationIndex, uint16 observationCardinality) = observations.write(
                 slot0_.observationIndex,
                 _blockTimestamp(),
+                // 交易前的Tick
                 slot0_.tick,
+                // 当前Oracle数量
                 slot0_.observationCardinality,
+                // 可用Oracle数量
                 slot0_.observationCardinalityNext
             );
 
